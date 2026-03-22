@@ -3,6 +3,7 @@ import 'package:ikt205g26v_04/pages/details.dart';
 import 'package:ikt205g26v_04/storage/note.dart';
 import 'package:ikt205g26v_04/storage/note_service.dart';
 import 'package:ikt205g26v_04/utils/snackbar_utils.dart';
+import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 
 class NoteListWidget extends StatefulWidget {
   const NoteListWidget({super.key});
@@ -12,49 +13,54 @@ class NoteListWidget extends StatefulWidget {
 }
 
 class _NoteListWidgetState extends State<NoteListWidget> {
-  late Future<List<Note>> _notesFuture;
+  late final PagingController<int, Note> _pagingController;
 
   @override
   void initState() {
     super.initState();
-    _loadNotes();
+
+    _pagingController = PagingController<int, Note>(
+      getNextPageKey: (state) {
+        if (state.lastPageIsEmpty) {
+          return null;
+        }
+
+        return state.items?.length ?? 0;
+      },
+      fetchPage: (pageKey) {
+        return NoteService().getNotes(from: pageKey);
+      },
+    );
   }
 
-  void _loadNotes() {
-    _notesFuture = NoteService().getNotes();
+  Future<void> _refresh() async {
+    _pagingController.refresh();
   }
 
-  void refresh() {
-    setState(() {
-      _loadNotes();
-    });
+  @override
+  void dispose() {
+    _pagingController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Note>>(
-      future: _notesFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return Center(child: Text('Failed to load notes: ${snapshot.error}'));
-        }
-
-        final notes = snapshot.data ?? const <Note>[];
-
-        if (notes.isEmpty) {
-          return const Center(child: Text('No notes yet.'));
-        }
-
-        return RefreshIndicator(
-          onRefresh: () async => refresh(),
-          child: ListView.builder(
-            itemCount: notes.length,
-            itemBuilder: (context, index) {
-              final note = notes[index];
+    return RefreshIndicator(
+      onRefresh: () => Future.sync(_refresh),
+      child: PagingListener<int, Note>(
+        controller: _pagingController,
+        builder: (context, state, fetchNextPage) => PagedListView<int, Note>(
+          state: state,
+          fetchNextPage: fetchNextPage,
+          builderDelegate: PagedChildBuilderDelegate<Note>(
+            firstPageProgressIndicatorBuilder: (_) => const Center(child: CircularProgressIndicator()),
+            newPageProgressIndicatorBuilder: (_) => const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            firstPageErrorIndicatorBuilder: (_) => Center(child: Text('Failed to load notes: ${state.error}')),
+            noItemsFoundIndicatorBuilder: (_) => const Center(child: Text('No notes yet.')),
+            itemBuilder: (context, note, index) {
               return Dismissible(
                 key: ValueKey('note-$index'),
                 direction: DismissDirection.startToEnd,
@@ -82,22 +88,21 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
                   SnackBarUtils.infoSnackBar(context, 'Note deleted');
 
-                  refresh();
+                  _pagingController.refresh();
                 },
                 child: ListTile(
                   title: Text(note.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                   subtitle: Text(note.text, maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () async {
                     await Navigator.of(context).push(MaterialPageRoute(builder: (context) => DetailsPage(note)));
-
-                    setState(() {});
+                    _pagingController.refresh();
                   },
                 ),
               );
             },
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

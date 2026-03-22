@@ -9,8 +9,11 @@ class NoteService {
 
   NoteService._internal();
 
-  Future<List<Note>> getNotes() async {
-    final data = await supabase.from('notes').select().order('updated_at', ascending: false);
+  Future<List<Note>> getNotes({int from = 0, int limit = 5}) async {
+    // demo delay
+    await Future.delayed(const Duration(seconds: 1));
+
+    final data = await supabase.from('notes').select().order('updated_at', ascending: false).range(from, from + limit - 1);
 
     return (data as List).map((json) => Note.fromJson(json)).toList();
   }
