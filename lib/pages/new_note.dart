@@ -166,7 +166,6 @@ class _NewNotePageState extends State<NewNotePage> {
 
                         await NotificationService.instance.showNoteCreatedNotification(note);
                       } catch (e) {
-                        print(e);
                         SnackBarUtils.errorSnackBar(context, 'Failed to create note');
                       } finally {
                         setState(() {
